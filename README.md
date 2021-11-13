@@ -45,8 +45,7 @@
 YOLOv5 🚀 is a family of object detection architectures and models pretrained on the COCO dataset, and represents <a href="https://ultralytics.com">Ultralytics</a>
  open-source research into future vision AI methods, incorporating lessons learned and best practices evolved over thousands of hours of research and development.
 </p>
-
-<!--
+<!-- 
 <a align="center" href="https://ultralytics.com/yolov5" target="_blank">
 <img width="800" src="https://github.com/ultralytics/yolov5/releases/download/v1.0/banner-api.png"></a>
 -->
@@ -61,7 +60,6 @@ See the [YOLOv5 Docs](https://docs.ultralytics.com) for full documentation on tr
 
 <details open>
 <summary>Install</summary>
-
 [**Python>=3.6.0**](https://www.python.org/) is required with all
 [requirements.txt](https://github.com/ultralytics/yolov5/blob/master/requirements.txt) installed including
 [**PyTorch>=1.7**](https://pytorch.org/get-started/locally/):
@@ -103,17 +101,16 @@ results.print()  # or .show(), .save(), .crop(), .pandas(), etc.
 
 <details>
 <summary>Inference with detect.py</summary>
-
 `detect.py` runs inference on a variety of sources, downloading models automatically from
 the [latest YOLOv5 release](https://github.com/ultralytics/yolov5/releases) and saving results to `runs/detect`.
 
 ```bash
 $ python detect.py --source 0  # webcam
-                            img.jpg  # image
-                            vid.mp4  # video
+                            file.jpg  # image 
+                            file.mp4  # video
                             path/  # directory
                             path/*.jpg  # glob
-                            'https://youtu.be/Zgi9g1ksQHc'  # YouTube
+                            'https://youtu.be/NUsoVlDFqZg'  # YouTube
                             'rtsp://example.com/media.mp4'  # RTSP, RTMP, HTTP stream
 ```
 
@@ -121,7 +118,6 @@ $ python detect.py --source 0  # webcam
 
 <details>
 <summary>Training</summary>
-
 Run commands below to reproduce results
 on [COCO](https://github.com/ultralytics/yolov5/blob/master/data/scripts/get_coco.sh) dataset (dataset auto-downloads on
 first use). Training times for YOLOv5s/m/l/x are 2/4/6/8 days on a single V100 (multi-GPU times faster). Use the
@@ -136,7 +132,7 @@ $ python train.py --data coco.yaml --cfg yolov5s.yaml --weights '' --batch-size 
 
 <img width="800" src="https://user-images.githubusercontent.com/26833433/90222759-949d8800-ddc1-11ea-9fa1-1c97eed2b963.png">
 
-</details>
+</details>  
 
 <details open>
 <summary>Tutorials</summary>
@@ -178,7 +174,7 @@ Get started in seconds with our verified environments. Click each icon below for
     <a href="https://github.com/ultralytics/yolov5/wiki/GCP-Quickstart">
         <img src="https://github.com/ultralytics/yolov5/releases/download/v1.0/logo-gcp-small.png" width="15%"/>
     </a>
-</div>
+</div>  
 
 ## <div align="center">Integrations</div>
 
@@ -193,7 +189,7 @@ Get started in seconds with our verified environments. Click each icon below for
 
 |Weights and Biases|Roboflow ⭐ NEW|
 |:-:|:-:|
-|Automatically track and visualize all your YOLOv5 training runs in the cloud with [Weights & Biases](https://wandb.ai/site?utm_campaign=repo_yolo_readme)|Label and export your custom datasets directly to YOLOv5 for training with [Roboflow](https://roboflow.com/?ref=ultralytics) |
+|Automatically track and visualize all your YOLOv5 training runs in the cloud with [Weights & Biases](https://wandb.ai/site?utm_campaign=repo_yolo_readme)|Label and automatically export your custom datasets directly to YOLOv5 for training with [Roboflow](https://roboflow.com/?ref=ultralytics) |
 
 
 <!-- ## <div align="center">Compete and Win</div>
@@ -239,7 +235,7 @@ We are super excited about our first-ever Ultralytics YOLOv5 🚀 EXPORT Competi
 |[YOLOv5s6][assets]     |1280 |44.5   |63.0   |385    |8.2    |3.6    |16.8   |12.6
 |[YOLOv5m6][assets]     |1280 |51.0   |69.0   |887    |11.1   |6.8    |35.7   |50.0
 |[YOLOv5l6][assets]     |1280 |53.6   |71.6   |1784   |15.8   |10.5   |76.8   |111.4
-|[YOLOv5x6][assets]<br>+ [TTA][TTA]|1280<br>1536 |54.7<br>**55.4** |**72.4**<br>72.3 |3136<br>- |26.2<br>- |19.4<br>- |140.7<br>- |209.8<br>-
+|[YOLOv5x6][assets]<br>+ [TTA][TTA]|1280<br>1536 |54.7<br>**55.4** |**72.4**<br>72.3 |3136<br>- |26.2<br>- |19.4<br>- |140.7<br>- |209.8<br>- 
 
 <details>
   <summary>Table Notes (click to expand)</summary>

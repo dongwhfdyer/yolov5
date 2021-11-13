@@ -5,14 +5,15 @@ Train a YOLOv5 model on a custom dataset
 Usage:
     $ python path/to/train.py --data coco128.yaml --weights yolov5s.pt --img 640
 """
+
 import argparse
+import logging
 import math
 import os
 import random
 import sys
 import time
 from copy import deepcopy
-from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -22,7 +23,7 @@ import torch.nn as nn
 import yaml
 from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.optim import SGD, Adam, lr_scheduler
+from torch.optim import Adam, SGD, lr_scheduler
 from tqdm import tqdm
 
 FILE = Path(__file__).resolve()
@@ -36,20 +37,21 @@ from models.experimental import attempt_load
 from models.yolo import Model
 from utils.autoanchor import check_anchors
 from utils.autobatch import check_train_batch_size
-from utils.callbacks import Callbacks
 from utils.datasets import create_dataloader
+from utils.general import labels_to_class_weights, increment_path, labels_to_image_weights, init_seeds, \
+    strip_optimizer, get_latest_run, check_dataset, check_git_status, check_img_size, check_requirements, \
+    check_file, check_yaml, check_suffix, print_args, print_mutation, set_logging, one_cycle, colorstr, methods
 from utils.downloads import attempt_download
-from utils.general import (LOGGER, NCOLS, check_dataset, check_file, check_git_status, check_img_size,
-                           check_requirements, check_suffix, check_yaml, colorstr, get_latest_run, increment_path,
-                           init_seeds, intersect_dicts, labels_to_class_weights, labels_to_image_weights, methods,
-                           one_cycle, print_args, print_mutation, strip_optimizer)
-from utils.loggers import Loggers
-from utils.loggers.wandb.wandb_utils import check_wandb_resume
 from utils.loss import ComputeLoss
+from utils.plots import plot_labels, plot_evolve
+from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, intersect_dicts, select_device, \
+    torch_distributed_zero_first
+from utils.loggers.wandb.wandb_utils import check_wandb_resume
 from utils.metrics import fitness
-from utils.plots import plot_evolve, plot_labels
-from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
+from utils.loggers import Loggers
+from utils.callbacks import Callbacks
 
+LOGGER = logging.getLogger(__name__)
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
 WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
@@ -104,7 +106,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     nc = 1 if single_cls else int(data_dict['nc'])  # number of classes
     names = ['item'] if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
     assert len(names) == nc, f'{len(names)} names found for nc={nc} dataset in {data}'  # check
-    is_coco = isinstance(val_path, str) and val_path.endswith('coco/val2017.txt')  # COCO dataset
+    is_coco = data.endswith('coco.yaml') and nc == 80  # COCO dataset
 
     # Model
     check_suffix(weights, '.pt')  # check weights
@@ -127,7 +129,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     for k, v in model.named_parameters():
         v.requires_grad = True  # train all layers
         if any(x in k for x in freeze):
-            LOGGER.info(f'freezing {k}')
+            print(f'freezing {k}')
             v.requires_grad = False
 
     # Image size
@@ -199,8 +201,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     # DP mode
     if cuda and RANK == -1 and torch.cuda.device_count() > 1:
-        LOGGER.warning('WARNING: DP not recommended, use torch.distributed.run for best DDP Multi-GPU results.\n'
-                       'See Multi-GPU Tutorial at https://github.com/ultralytics/yolov5/issues/475 to get started.')
+        logging.warning('DP not recommended, instead use torch.distributed.run for best DDP Multi-GPU results.\n'
+                        'See Multi-GPU Tutorial at https://github.com/ultralytics/yolov5/issues/475 to get started.')
         model = torch.nn.DataParallel(model)
 
     # SyncBatchNorm
@@ -212,7 +214,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     train_loader, dataset = create_dataloader(train_path, imgsz, batch_size // WORLD_SIZE, gs, single_cls,
                                               hyp=hyp, augment=True, cache=opt.cache, rect=opt.rect, rank=LOCAL_RANK,
                                               workers=workers, image_weights=opt.image_weights, quad=opt.quad,
-                                              prefix=colorstr('train: '), shuffle=True)
+                                              prefix=colorstr('train: '))
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
     nb = len(train_loader)  # number of batches
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
@@ -245,9 +247,9 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     # Model parameters
     nl = de_parallel(model).model[-1].nl  # number of detection layers (to scale hyps)
-    hyp['box'] *= 3 / nl  # scale to layers
-    hyp['cls'] *= nc / 80 * 3 / nl  # scale to classes and layers
-    hyp['obj'] *= (imgsz / 640) ** 2 * 3 / nl  # scale to image size and layers
+    hyp['box'] *= 3. / nl  # scale to layers
+    hyp['cls'] *= nc / 80. * 3. / nl  # scale to classes and layers
+    hyp['obj'] *= (imgsz / 640) ** 2 * 3. / nl  # scale to image size and layers
     hyp['label_smoothing'] = opt.label_smoothing
     model.nc = nc  # attach number of classes to model
     model.hyp = hyp  # attach hyperparameters to model
@@ -266,7 +268,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     stopper = EarlyStopping(patience=opt.patience)
     compute_loss = ComputeLoss(model)  # init loss class
     LOGGER.info(f'Image sizes {imgsz} train, {imgsz} val\n'
-                f'Using {train_loader.num_workers * WORLD_SIZE} dataloader workers\n'
+                f'Using {train_loader.num_workers} dataloader workers\n'
                 f"Logging results to {colorstr('bold', save_dir)}\n"
                 f'Starting training for {epochs} epochs...')
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
@@ -288,11 +290,11 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         pbar = enumerate(train_loader)
         LOGGER.info(('\n' + '%10s' * 7) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'labels', 'img_size'))
         if RANK in [-1, 0]:
-            pbar = tqdm(pbar, total=nb, ncols=NCOLS, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}')  # progress bar
+            pbar = tqdm(pbar, total=nb)  # progress bar
         optimizer.zero_grad()
         for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
             ni = i + nb * epoch  # number integrated batches (since train start)
-            imgs = imgs.to(device, non_blocking=True).float() / 255  # uint8 to float32, 0-255 to 0.0-1.0
+            imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
 
             # Warmup
             if ni <= nw:
@@ -379,8 +381,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                         'ema': deepcopy(ema.ema).half(),
                         'updates': ema.updates,
                         'optimizer': optimizer.state_dict(),
-                        'wandb_id': loggers.wandb.wandb_run.id if loggers.wandb else None,
-                        'date': datetime.now().isoformat()}
+                        'wandb_id': loggers.wandb.wandb_run.id if loggers.wandb else None}
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
@@ -444,8 +445,8 @@ def parse_opt(known=False):
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
-    parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
-    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
+    parser.add_argument('--batch-size', type=int, default=6, help='total batch size for all GPUs, -1 for autobatch')
+    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=224, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
@@ -455,12 +456,13 @@ def parse_opt(known=False):
     parser.add_argument('--bucket', type=str, default='', help='gsutil bucket')
     parser.add_argument('--cache', type=str, nargs='?', const='ram', help='--cache images in "ram" (default) or "disk"')
     parser.add_argument('--image-weights', action='store_true', help='use weighted image selection for training')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    # cuda:0 意思是0号gpu
+    parser.add_argument('--device', default='cuda:0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%%')
     parser.add_argument('--single-cls', action='store_true', help='train multi-class data as single-class')
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
-    parser.add_argument('--workers', type=int, default=8, help='max dataloader workers (per RANK in DDP mode)')
+    parser.add_argument('--workers', type=int, default=0, help='maximum number of dataloader workers')
     parser.add_argument('--project', default=ROOT / 'runs/train', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
@@ -484,6 +486,7 @@ def parse_opt(known=False):
 
 def main(opt, callbacks=Callbacks()):
     # Checks
+    set_logging(RANK)
     if RANK in [-1, 0]:
         print_args(FILE.stem, opt)
         check_git_status()
@@ -607,9 +610,9 @@ def main(opt, callbacks=Callbacks()):
 
         # Plot results
         plot_evolve(evolve_csv)
-        LOGGER.info(f'Hyperparameter evolution finished\n'
-                    f"Results saved to {colorstr('bold', save_dir)}\n"
-                    f'Use best hyperparameters example: $ python train.py --hyp {evolve_yaml}')
+        print(f'Hyperparameter evolution finished\n'
+              f"Results saved to {colorstr('bold', save_dir)}\n"
+              f'Use best hyperparameters example: $ python train.py --hyp {evolve_yaml}')
 
 
 def run(**kwargs):
