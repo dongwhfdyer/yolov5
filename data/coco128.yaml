@@ -13,9 +13,9 @@
 #val: images/train2017  # val images (relative to 'path') 128 images
 #test:  # test images (optional)
 
-path: D:\ANewspace\code\DATASETS\nums
-train: train1030
-val: test1030
+path: d:\ANewspace\code\DATASETS\CeyMo\
+train: train\images\
+val: test\images\
 #test:
 #nc: 80  # number of classes
 #names: ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
@@ -28,8 +28,8 @@ val: test1030
 #        'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
 #        'hair drier', 'toothbrush']  # class names
 
-nc: 6
-names: ['3','4','5','6','7','8']
+nc: 11
+names: ['SA', 'LA', 'RA', 'SLA', 'SRA', 'DM', 'PC', 'JB', 'SL', 'BL', 'CL']
 
 
 # Download script/URL (optional)
