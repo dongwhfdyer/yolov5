@@ -13,10 +13,16 @@
 #val: images/train2017  # val images (relative to 'path') 128 images
 #test:  # test images (optional)
 
-path: d:\ANewspace\code\DATASETS\CeyMo\
+path: d:\desktop\0625\graduate_project_experiment_data\
 train: train\images\
-val: test\images\
+val: ceymo_test_efficuegan_jpg\images\
+
+#path: d:\ANewspace\code\DATASETS\CeyMo\
+#train: train\images\
+#val: ceymo_test_rain\images\
+
 #test:
+
 #nc: 80  # number of classes
 #names: ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
 #        'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
@@ -29,7 +35,8 @@ val: test\images\
 #        'hair drier', 'toothbrush']  # class names
 
 nc: 11
-names: ['SA', 'LA', 'RA', 'SLA', 'SRA', 'DM', 'PC', 'JB', 'SL', 'BL', 'CL']
+names: [ '向前箭头', '左箭头', '右箭头', '前左箭头', '前右箭头', '菱形', '斑马线', '禁止停车', '慢速标志', '公交专用道', '骑行专用道' ]
+#names: [ 'SA', 'LA', 'RA', 'SLA', 'SRA', 'DM', 'PC', 'JB', 'SL', 'BL', 'CL' ]
 
 
 # Download script/URL (optional)

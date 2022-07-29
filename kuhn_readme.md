@@ -1,5 +1,4 @@
-# 机器人大赛数字牌识别算法
+# yolo user guide by kuhn
 
-best.pt 为算法权重。
-
-直接运行detect.py 即可。
+1. In coco128.yaml,  change the following parms : `names`, `nc`, `val`, `train` ,`path` 
+   
