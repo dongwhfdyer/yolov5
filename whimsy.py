@@ -1,5 +1,8 @@
 # read txt file, strip all the spaces, and split the string into a list
+import os
+import random
 import re
+import shutil
 
 import pandas as pd
 
@@ -98,6 +101,131 @@ def log2newlog2two_table2one_table2excel():
     # one_table.to_excel(r"D:\ANewspace\code\yolov5_new\runs\val\derainVSrainy_mAP.xlsx", float_format="%.4f")
 
 
+def random_pick_images():
+    folder_path = r"datasets/neu_det/IMAGES"
+    new_folder = r"datasets/neu_det_random"
+    if os.path.exists(new_folder):
+        shutil.rmtree(new_folder)
+    os.makedirs(new_folder)
+    file_list = os.listdir(folder_path)
+    random_files = random.choices(file_list, k=30)
+    for file in random_files:
+        shutil.copy(folder_path + "/" + file, new_folder)
+
+
+def train_test_split():
+    ##########nhuk#################################### param setting
+    dataset_base_path = r"datasets/neu_det"
+    ##########nhuk####################################
+    anno_folder = os.path.join(dataset_base_path, "ANNOTATIONS")
+    image_folder = os.path.join(dataset_base_path, "IMAGES")
+    split_info_folder = os.path.join(dataset_base_path, "split_info")
+
+    trainval_percent = 0.9  # trainval:test = 0.8:0.2
+    train_percent = 0.9  # train:val = 0.7:0.3
+    total_xml = os.listdir(anno_folder)
+    txtsavepath = split_info_folder
+
+    if os.path.exists(txtsavepath):
+        shutil.rmtree(txtsavepath)
+    os.makedirs(txtsavepath)
+
+    num = len(total_xml)
+    list_index = range(num)
+    tv = int(num * trainval_percent)
+    tr = int(tv * train_percent)
+    trainval_list = random.sample(list_index, tv)
+    train_list = random.sample(trainval_list, tr)
+
+    file_trainval = open(txtsavepath + '/trainval.txt', 'w')
+    file_test = open(txtsavepath + '/test.txt', 'w')
+    file_train = open(txtsavepath + '/train.txt', 'w')
+    file_val = open(txtsavepath + '/val.txt', 'w')
+
+    for i in list_index:
+        name = total_xml[i][:-4] + '\n'
+        if i in trainval_list:
+            file_trainval.write(name)
+            if i in train_list:
+                file_train.write(name)
+            else:
+                file_val.write(name)
+        else:
+            file_test.write(name)
+
+    file_trainval.close()
+    file_train.close()
+    file_val.close()
+    file_test.close()
+
+
+def check_folder_exist(*folders_path):
+    for folder_path in folders_path:
+        if os.path.exists(folder_path):
+            shutil.rmtree(folder_path)
+        os.makedirs(folder_path)
+
+
+def pick_crazing_images_to_folder():
+    original_data_folder = r"datasets/neu_det/IMAGES/"
+    original_label_folder = r"datasets/neu_det/ANNOTATIONS_txt/"
+    crazing_data_path = r"datasets/neu_det_crazing/"
+    crzaing_train_data_path = os.path.join(crazing_data_path, "train")
+    crzaing_val_data_path = os.path.join(crazing_data_path, "val")
+    train_label_folder = os.path.join(crzaing_train_data_path, "labels")
+    train_image_folder = os.path.join(crzaing_train_data_path, "images")
+    val_label_folder = os.path.join(crzaing_val_data_path, "labels")
+    val_image_folder = os.path.join(crzaing_val_data_path, "images")
+    check_folder_exist(train_label_folder, train_image_folder, val_label_folder, val_image_folder)
+
+    train_val_ratio = 0.9  # train:val = 0.9:0.1
+    total_data_list = os.listdir(original_data_folder)
+    #  filter the images with "crazing" in the name
+    total_data_list = [data for data in total_data_list if "crazing" in data or "rolled-in_scale" in data]
+    num = len(total_data_list)
+    list_index = range(num)
+    tv = int(num * train_val_ratio)
+    train_list = random.sample(list_index, tv)
+    val_list = [i for i in list_index if i not in train_list]
+    for i in list_index:
+        if i in train_list:
+            shutil.copy(os.path.join(original_data_folder, total_data_list[i]), train_image_folder)
+            shutil.copy(os.path.join(original_label_folder, total_data_list[i].replace(".jpg", ".txt")), train_label_folder)
+        else:
+            shutil.copy(os.path.join(original_data_folder, total_data_list[i]), val_image_folder)
+            shutil.copy(os.path.join(original_label_folder, total_data_list[i].replace(".jpg", ".txt")), val_label_folder)
+
+
+def change_index():
+    crazing_data_path = r"datasets/neu_det_crazing/"
+    crzaing_train_data_path = os.path.join(crazing_data_path, "train")
+    crzaing_val_data_path = os.path.join(crazing_data_path, "val")
+    train_label_folder = os.path.join(crzaing_train_data_path, "labels")
+    val_label_folder = os.path.join(crzaing_val_data_path, "labels")
+    classes_map = {"crazing": 0, "rolled-in_scale": 1}
+
+    def process_one_folder(folder_path):
+        label_paths = os.listdir(folder_path)
+        for label_path in label_paths:
+            path = os.path.join(folder_path, label_path)
+            changed_line = ""
+            with open(path, 'r') as f:
+                lines = f.readlines()
+                if "crazing" in label_path:
+                    label_id = 0
+                elif "rolled-in_scale" in label_path:
+                    label_id = 1
+                for line in lines:
+                    changed_line += str(label_id) + line[1:]
+            with open(path, 'w') as f:
+                f.write(changed_line)
+
+    process_one_folder(train_label_folder)
+    process_one_folder(val_label_folder)
+
+def create_crazing_rolled_dataset():
+    pick_crazing_images_to_folder()
+    change_index()
 
 if __name__ == '__main__':
-    log2newlog2two_table2one_table2excel()
+    create_crazing_rolled_dataset()

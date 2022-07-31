@@ -350,7 +350,8 @@ def check_dataset(data, autodownload=True):
     path = extract_dir or Path(data.get('path') or '')  # optional 'path' default to '.'
     for k in 'train', 'val', 'test':
         if data.get(k):  # prepend path
-            data[k] = str(path / data[k]) if isinstance(data[k], str) else [str(path / x) for x in data[k]]
+            data[k] = os.path.join(path, data[k])
+            # data[k] = str(path / data[k]) if isinstance(data[k], str) else [str(path / x) for x in data[k]]
 
     assert 'nc' in data, "Dataset 'nc' key missing."
     if 'names' not in data:

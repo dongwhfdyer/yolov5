@@ -13,9 +13,18 @@
 #val: images/train2017  # val images (relative to 'path') 128 images
 #test:  # test images (optional)
 
-path: d:\desktop\0625\graduate_project_experiment_data\
-train: train\images\
-val: ceymo_test_efficuegan_jpg\images\
+#path: datasets/neu_det_crazing
+#train: train/images
+#val: val/images
+
+path: datasets/neu_det_train_val
+train: train/images
+val: val/images
+
+
+#path: datasets/neu_det_split
+#train: train/images
+#val: val/images
 
 #path: d:\ANewspace\code\DATASETS\CeyMo\
 #train: train\images\
@@ -34,10 +43,14 @@ val: ceymo_test_efficuegan_jpg\images\
 #        'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
 #        'hair drier', 'toothbrush']  # class names
 
-nc: 11
-names: [ '向前箭头', '左箭头', '右箭头', '前左箭头', '前右箭头', '菱形', '斑马线', '禁止停车', '慢速标志', '公交专用道', '骑行专用道' ]
+#nc: 3
+#names: ['crazing', 'rolled-in_scale', 'scratches']  # class names
+nc: 6
+names: [ 'crazing', 'patches', 'inclusion', 'pitted_surface', 'rolled-in_scale', 'scratches' ]
+
+#names: [ '向前箭头', '左箭头', '右箭头', '前左箭头', '前右箭头', '菱形', '斑马线', '禁止停车', '慢速标志', '公交专用道', '骑行专用道' ]
 #names: [ 'SA', 'LA', 'RA', 'SLA', 'SRA', 'DM', 'PC', 'JB', 'SL', 'BL', 'CL' ]
 
 
 # Download script/URL (optional)
-download: https://github.com/ultralytics/yolov5/releases/download/v1.0/coco128.zip
+#download: https://github.com/ultralytics/yolov5/releases/download/v1.0/coco128.zip

@@ -267,17 +267,22 @@ def run(
 
 
 def parse_opt():
+    ##########nhuk#################################### param setting
+    weights_path = ROOT / 'runs/train/exp6/weights/best.pt'
+    img_source_path = ROOT / "datasets/neu_det_random"
+    imgsz = 640
+    device = '0'
+    ##########nhuk####################################
     parser = argparse.ArgumentParser()
     # parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path(s)')
-    parser.add_argument('--weights', nargs='+', type=str, default='runs/train/exp13/weights/best.pt', help='model path(s)')
-    # parser.add_argument('--source', type=str, default=ROOT / 'data/images', help='file/dir/URL/glob, 0 for webcam')
-    parser.add_argument('--source', type=str, default=r"D:\ANewspace\code\DATASETS\CeyMo\test\images", help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--weights', nargs='+', type=str, default=weights_path, help='model path(s)')
+    parser.add_argument('--source', type=str, default=img_source_path, help='file/dir/URL/glob, 0 for webcam')
     # parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
-    parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[224], help='inference size h,w')
+    parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[imgsz, imgsz], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
-    parser.add_argument('--device', default='cpu', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default=device, help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='show results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
@@ -309,8 +314,8 @@ def main(opt):
 
 if __name__ == "__main__":
     opt = parse_opt()
-    opt.source = r"D:\ANewspace\code\efficientderain-master\test_results_jpg\images"
-    # opt.source = r"D:\ANewspace\code\DATASETS\CeyMo\test\images"
-    opt.weights = r"D:\ANewspace\code\yolov5_new\runs\train\exp13\weights\best.pt"
-    opt.imgsz = [360, 360]
+    # opt.source = r"D:\ANewspace\code\efficientderain-master\test_results_jpg\images"
+    # # opt.source = r"D:\ANewspace\code\DATASETS\CeyMo\test\images"
+    # opt.weights = r"D:\ANewspace\code\yolov5_new\runs\train\exp13\weights\best.pt"
+    # opt.imgsz = [360, 360]
     main(opt)
