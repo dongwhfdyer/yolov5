@@ -5,6 +5,14 @@ import random
 import argparse
 import shutil
 
+import xml.etree.ElementTree as ET
+
+import pickle
+import os
+from os import listdir, getcwd
+from os.path import join
+import glob
+
 
 def check_folders(*folders):
     for folder in folders:
@@ -52,15 +60,6 @@ def try1():
     file_test.close()
 
 
-import xml.etree.ElementTree as ET
-
-import pickle
-import os
-from os import listdir, getcwd
-from os.path import join
-import glob
-
-
 def convert(size, box):
     dw = 1.0 / size[0]
     dh = 1.0 / size[1]
@@ -75,9 +74,10 @@ def convert(size, box):
     return (x, y, w, h)
 
 
-def convert_annotation(image_name, txt_folder_path, xml_folder_path):
+def convert_annotation(self, image_name, txt_folder_path, xml_folder_path):
     classes = ['crazing', 'patches', 'inclusion', 'pitted_surface', 'rolled-in_scale', 'scratches']
     # in_file = open('./indata/' + image_name[:-3] + 'xml')  # xml文件路径
+
     out_txt_path = os.path.join(txt_folder_path, image_name[:-3] + 'txt')
     xml_path = os.path.join(xml_folder_path, image_name[:-3] + 'xml')
     out_file_handle = open(out_txt_path, 'a')
@@ -104,6 +104,14 @@ def convert_annotation(image_name, txt_folder_path, xml_folder_path):
         out_file_handle.write(str(cls_id) + " " + " ".join([str(a) for a in bb]) + '\n')
 
     out_file_handle.close()
+
+
+def convert_whole():
+    txt_folder_path = r'd:\download\NEU-DET\TRAIN\ANNOTATIONS_txt'
+    xml_folder_path = r'd:\download\NEU-DET\TRAIN\ANNOTATIONS'
+    copy_files(xml_folder_path, txt_folder_path)
+    for file in os.listdir(txt_folder_path):
+        convert_annotation(file, txt_folder_path, xml_folder_path)
 
 
 def xml2txt():
@@ -226,14 +234,18 @@ def split_train_val_xml():
     ##########nhuk#################################### param setting
     original_path = 'datasets/neu_det'
     target_path = 'datasets/neu_det_train_val'
-    file_ext = '.txt'
-    train_val_ratio = 0.9
 
     # original_path = 'd:/download/NEU-DET/neu_det'
     # target_path = 'd:/download/NEU-DET/neu_det_train_val_xml'
 
+    file_ext = '.xml'
+    train_val_ratio = 0.9
+
     ##########nhuk####################################
-    original_anno_path = os.path.join(original_path, 'ANNOTATIONS_txt')
+    if file_ext == '.xml':
+        original_anno_path = os.path.join(original_path, 'ANNOTATIONS')
+    else:
+        original_anno_path = os.path.join(original_path, 'ANNOTATIONS_txt')
     original_image_path = os.path.join(original_path, 'IMAGES')
     # base_path = 'datasets/neu_det_train_val_xml/'
     train_base_path = os.path.join(target_path, 'train')
@@ -260,10 +272,89 @@ def split_train_val_xml():
         shutil.copy(os.path.join(original_anno_path, xml_path), val_anno_path)
 
 
+class convert_to_voc_2017:
+
+    def __init__(self):
+
+        self.target_path = r'datasets\neu_det_train_val'
+
+        self.train_base_path = os.path.join(self.target_path, 'train')
+        self.val_base_path = os.path.join(self.target_path, 'val')
+
+        self.train_data_path = os.path.join(self.train_base_path, 'images')
+        self.train_anno_path = os.path.join(self.train_base_path, 'labels')
+
+        self.val_data_path = os.path.join(self.val_base_path, 'images')
+        self.val_anno_path = os.path.join(self.val_base_path, 'labels')
+
+        self.train_whole_txt = os.path.join(self.target_path, 'train_whole.txt')
+        self.val_whole_txt = os.path.join(self.target_path, 'val_whole.txt')
+
+        if os.path.exists(self.train_whole_txt):
+            os.remove(self.train_whole_txt)
+        if os.path.exists(self.val_whole_txt):
+            os.remove(self.val_whole_txt)
+
+    def convert(self, size, box):
+        dw = 1.0 / size[0]
+        dh = 1.0 / size[1]
+        x = (box[0] + box[1]) / 2.0
+        y = (box[2] + box[3]) / 2.0
+        w = box[1] - box[0]
+        h = box[3] - box[2]
+        x = x * dw
+        w = w * dw
+        y = y * dh
+        h = h * dh
+        return (x, y, w, h)
+
+    def convert_annotation(self, image_name, image_folder_path, xml_folder_path, whole_txt_path):
+        classes = ['crazing', 'patches', 'inclusion', 'pitted_surface', 'rolled-in_scale', 'scratches']
+        # in_file = open('./indata/' + image_name[:-3] + 'xml')  # xml文件路径
+        target_txt = open(whole_txt_path, "a")
+        target_txt.write(os.path.join(image_folder_path, image_name) + " ")
+
+        xml_path = os.path.join(xml_folder_path, image_name[:-3] + 'xml')
+        xml_file_handle = open(xml_path, 'r')
+
+        xml_text = xml_file_handle.read()
+        root = ET.fromstring(xml_text)
+        xml_file_handle.close()
+
+        for obj in root.iter('object'):
+            cls = obj.find('name').text
+
+            cls_id = classes.index(cls)
+            xmlbox = obj.find('bndbox')
+            b = (int(xmlbox.find('xmin').text), int(xmlbox.find('ymin').text),
+                 int(xmlbox.find('xmax').text), int(xmlbox.find('ymax').text))
+            # b = (float(xmlbox.find('xmin').text), float(xmlbox.find('ymin').text),
+            #      float(xmlbox.find('xmax').text), float(xmlbox.find('ymax').text))
+
+            target_txt.write(str(cls_id) + " " + " ".join(map(str, b)) + ' ')
+
+        target_txt.write("\n")
+
+        target_txt.close()
+
+    def convert_whole(self):
+        def convert_one_folder(data_one_folder, anno_one_folder, whole_txt_path):
+            image_list = os.listdir(data_one_folder)
+            for image_name in image_list:
+                self.convert_annotation(image_name, data_one_folder, anno_one_folder, whole_txt_path)
+
+        convert_one_folder(self.train_data_path, self.train_anno_path, self.train_whole_txt)
+        convert_one_folder(self.val_data_path, self.val_anno_path, self.val_whole_txt)
+
+
 if __name__ == '__main__':
-    ##########nhuk#################################### train_val_split
     split_train_val_xml()
-    ##########nhuk####################################
+    ctv = convert_to_voc_2017()
+    ctv.convert_whole()
+
+    # ##########nhuk#################################### train_val_split
+    # split_train_val_xml()
+    # ##########nhuk####################################
 
     # ##########nhuk####################################  train_val_test_split
     # xml2txt()

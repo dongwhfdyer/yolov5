@@ -20,12 +20,14 @@ def check_train_batch_size(model, imgsz=640):
 
 
 def autobatch(model, imgsz=640, fraction=0.9, batch_size=16):
-    # Automatically estimate best batch size to use `fraction` of available CUDA memory
-    # Usage:
-    #     import torch
-    #     from utils.autobatch import autobatch
-    #     model = torch.hub.load('ultralytics/yolov5', 'yolov5s', autoshape=False)
-    #     print(autobatch(model))
+    """
+    Automatically estimate best batch size to use `fraction` of available CUDA memory.
+    It will get the mapping of the batch size to the memory usage, which is illustrated by one-order polynomial curve.
+    mem = a * batch_size + b
+    Then the best batch_size can be calculated by solving the equation:
+    batch_size = (mem * fraction - b) / a
+    It's used to leave some space for the GPU memory. So, fraction = 0.9 means that we want to leave 90% of GPU memory for the model.
+    """
 
     prefix = colorstr('autobatch: ')
     print(f'{prefix}Computing optimal batch size for --imgsz {imgsz}')
@@ -48,7 +50,7 @@ def autobatch(model, imgsz=640, fraction=0.9, batch_size=16):
     except Exception as e:
         print(f'{prefix}{e}')
 
-    y = [x[2] for x in y if x]  # memory [2]
+    y = [x[2] for x in y if x]  # get the memory. It will eliminate the ones with no memory left.
     batch_sizes = batch_sizes[:len(y)]
     p = np.polyfit(batch_sizes, y, deg=1)  # first degree polynomial fit
     b = int((f * fraction - p[1]) / p[0])  # y intercept (optimal batch size)

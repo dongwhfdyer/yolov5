@@ -21,6 +21,8 @@ path: datasets/neu_det_train_val
 train: train/images
 val: val/images
 
+nc: 6
+names: [ 'crazing', 'patches', 'inclusion', 'pitted_surface', 'rolled-in_scale', 'scratches' ]
 
 #path: datasets/neu_det_split
 #train: train/images

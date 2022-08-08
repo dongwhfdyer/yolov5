@@ -268,15 +268,21 @@ def run(
 
 def parse_opt():
     ##########nhuk#################################### param setting
-    weights_path = ROOT / 'runs/train/exp6/weights/best.pt'
-    img_source_path = ROOT / "datasets/neu_det_random"
+    # weights_path = ROOT / 'temp/80_best.pt'
+    # weights_path = ROOT / 'yolov5s.pt'
+    weights_path = ROOT / 'runs/train/exp26/weights/best.pt'
+    source_path = "datasets/shibie/images"
+    # source_path = "d:\\ANewspace\\code\\DATASETS\\CeyMo\\test\\images\\"
+    # img_source_path = ROOT / "datasets/neu_det_train_val/val/images"
     imgsz = 640
     device = '0'
+    if_visualize_feature = False
+    if_save_crop = True
     ##########nhuk####################################
     parser = argparse.ArgumentParser()
     # parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path(s)')
     parser.add_argument('--weights', nargs='+', type=str, default=weights_path, help='model path(s)')
-    parser.add_argument('--source', type=str, default=img_source_path, help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--source', type=str, default=source_path, help='file/dir/URL/glob, 0 for webcam')
     # parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[imgsz, imgsz], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
@@ -286,12 +292,12 @@ def parse_opt():
     parser.add_argument('--view-img', action='store_true', help='show results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
-    parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
+    parser.add_argument('--save-crop', default=if_save_crop, help='save cropped prediction boxes')
     parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --classes 0, or --classes 0 2 3')
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
-    parser.add_argument('--visualize', action='store_true', help='visualize features')
+    parser.add_argument('--visualize', default=if_visualize_feature, help='visualize features')
     parser.add_argument('--update', action='store_true', help='update all models')
     parser.add_argument('--project', default=ROOT / 'runs/detect', help='save results to project/name')
     parser.add_argument('--name', default='exp', help='save results to project/name')

@@ -33,10 +33,12 @@ def torch_distributed_zero_first(local_rank: int):
     """
     Decorator to make all processes in distributed training wait for each local_master to do something.
     """
+    # If it's not the line_detect_one_img process, jut block here and wait for master to do something. It means that it will not do the work wrapped in the context.
+    # If it's the line_detect_one_img process, it will do the work within the "with" statement. And then it will switch
     if local_rank not in [-1, 0]:
         dist.barrier(device_ids=[local_rank])
-    yield
-    if local_rank == 0:
+    yield  # "yield" is a split point that marks the end of the context.
+    if local_rank == 0:  # When the context is over, the line_detect_one_img process resumes here.
         dist.barrier(device_ids=[0])
 
 
@@ -61,8 +63,7 @@ def select_device(device='', batch_size=None):
     device = str(device).strip().lower().replace('cuda:', '')  # to string, 'cuda:0' to '0'
     cpu = device == 'cpu'
     if cpu:
-        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # force torch.cuda.is_available() = False
-    elif device:  # non-cpu device requested
+        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # force torch.cuda.is_available() = ?    elif device:  # non-cpu device requested
         os.environ['CUDA_VISIBLE_DEVICES'] = device  # set environment variable
         assert torch.cuda.is_available(), f'CUDA unavailable, invalid device {device} requested'  # check availability
 
@@ -130,7 +131,7 @@ def profile(input, ops, n=10, device=None):
                         t[2] = float('nan')
                     tf += (t[1] - t[0]) * 1000 / n  # ms per op forward
                     tb += (t[2] - t[1]) * 1000 / n  # ms per op backward
-                mem = torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0  # (GB)
+                mem = torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0  # (GB). There is an occasion that mem is not enough. kuhn edited
                 s_in = tuple(x.shape) if isinstance(x, torch.Tensor) else 'list'
                 s_out = tuple(y.shape) if isinstance(y, torch.Tensor) else 'list'
                 p = sum(list(x.numel() for x in m.parameters())) if isinstance(m, nn.Module) else 0  # parameters
@@ -155,6 +156,13 @@ def de_parallel(model):
 
 def intersect_dicts(da, db, exclude=()):
     # Dictionary intersection of matching keys and shapes, omitting 'exclude' keys, using da values
+    # In da's items, if key is in db and is not excluded and v's shape is matched, then use v. # kuhn edited
+    # ##########nhuk#################################### # illustrate the following statement
+    # dictt = {}
+    # for k, v in da.items():
+    #     if k not in db and v.shape == db[k].shape and not any(x in k for x in exclude):
+    #         dictt[k] = v
+    # ##########nhuk####################################
     return {k: v for k, v in da.items() if k in db and not any(x in k for x in exclude) and v.shape == db[k].shape}
 
 
@@ -332,11 +340,11 @@ class ModelEMA:
             self.updates += 1
             d = self.decay(self.updates)
 
-            msd = model.module.state_dict() if is_parallel(model) else model.state_dict()  # model state_dict
+            msd = model.module.state_dict() if is_parallel(model) else model.state_dict()  # When parallelly training, model's parameters are in model.module.state_dict() kuhn edited.
             for k, v in self.ema.state_dict().items():
                 if v.dtype.is_floating_point:
                     v *= d
-                    v += (1. - d) * msd[k].detach()
+                    v += (1. - d) * msd[k].detach() # `(1. - d) * msd[k].detach()` is the updated part.
 
     def update_attr(self, model, include=(), exclude=('process_group', 'reducer')):
         # Update EMA attributes

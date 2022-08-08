@@ -26,11 +26,12 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import Adam, SGD, lr_scheduler
 from tqdm import tqdm
 
-FILE = Path(__file__).resolve()
+FILE = Path(__file__).resolve()  # return the absolute path of the file
 ROOT = FILE.parents[0]  # YOLOv5 root directory
 if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))  # add ROOT to PATH
-ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
+    sys.path.append(str(ROOT))
+path_ = os.path.relpath(ROOT, Path.cwd())
+ROOT = Path(path_)
 
 import val  # for end-of-epoch mAP
 from models.experimental import attempt_load
@@ -75,6 +76,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     if isinstance(hyp, str):
         with open(hyp, errors='ignore') as f:
             hyp = yaml.safe_load(f)  # load hyps dict
+            print("hi")
     LOGGER.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
 
     # Save run settings
@@ -93,7 +95,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 weights, epochs, hyp = opt.weights, opt.epochs, opt.hyp
 
         # Register actions
-        for k in methods(loggers):
+        for k in methods(loggers):  # iterate over loggers' different methods
             callbacks.register_action(k, callback=getattr(loggers, k))
 
     # Config
@@ -104,27 +106,27 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         data_dict = data_dict or check_dataset(data)  # check if None
     train_path, val_path = data_dict['train'], data_dict['val']
     nc = 1 if single_cls else int(data_dict['nc'])  # number of classes
-    names = ['item'] if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
+    names = ['item'] if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names. If single_cls, only one class, otherwise as many as there are classes
     assert len(names) == nc, f'{len(names)} names found for nc={nc} dataset in {data}'  # check
     is_coco = data.endswith('coco.yaml') and nc == 80  # COCO dataset
 
     # Model
-    check_suffix(weights, '.pt')  # check weights
+    check_suffix(weights, '.pt')
     pretrained = weights.endswith('.pt')
     if pretrained:
         with torch_distributed_zero_first(LOCAL_RANK):
-            weights = attempt_download(weights)  # download if not found locally
-        ckpt = torch.load(weights, map_location=device)  # load checkpoint
-        model = Model(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
-        exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
+            weights = attempt_download(weights)
+        ckpt = torch.load(weights, map_location=device)
+        model = Model(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)
+        exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []
         csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
-        csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
-        model.load_state_dict(csd, strict=False)  # load
-        LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')  # report
+        csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # add model params from csd. Only add those params that are in the model, data shape is consistent, and not excluded.
+        model.load_state_dict(csd, strict=False)
+        LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')
     else:
-        model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)
 
-    # Freeze
+        # Freeze
     freeze = [f'model.{x}.' for x in range(freeze)]  # layers to freeze
     for k, v in model.named_parameters():
         v.requires_grad = True  # train all layers
@@ -217,10 +219,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                               prefix=colorstr('train: '))
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
     nb = len(train_loader)  # number of batches
-    print("########################################")
-    print("mlc:", mlc)
-    print("nb:", nb)
-    print("nc:", nc)
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
     # Process 0
@@ -445,13 +443,15 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
     ##########nhuk#################################### param setting
-    pt_path = ROOT / 'yolov5s.pt'
+    pt_path = ROOT / 'yolov5s.pt'  # pretrained model path
     # pt_path = ROOT / 'models/best.pt'
-    if_resume = False
-    coco_yaml_path = ROOT / 'data/coco128.yaml'
+    if_resume = False  # when model is freeze, we can resume training.  epochs = 32
+    coco_yaml_path = ROOT / 'data/X_shape_detection_1_classes.yaml'
     epochs = 300
-    imgsize = 640
+    imgsize = 960
     if_adam = True
+    batch_size = 16
+    num_workers = 10  # cpu data loader multi-threading
     ##########nhuk####################################
     parser.add_argument('--weights', type=str, default=pt_path, help='initial weights path')
     parser.add_argument('--resume', nargs='?', const=True, default=if_resume, help='resume most recent training')
@@ -461,32 +461,32 @@ def parse_opt(known=False):
 
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
-    parser.add_argument('--batch-size', type=int, default=32, help='total batch size for all GPUs, -1 for autobatch')
+    parser.add_argument('--batch-size', type=int, default=batch_size, help='total batch size for all GPUs, -1 for autobatch')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
     parser.add_argument('--noval', action='store_true', help='only validate final epoch')
     parser.add_argument('--noautoanchor', action='store_true', help='disable autoanchor check')
     parser.add_argument('--evolve', type=int, nargs='?', const=300, help='evolve hyperparameters for x generations')
     parser.add_argument('--bucket', type=str, default='', help='gsutil bucket')
-    parser.add_argument('--cache', type=str, nargs='?', const='ram', help='--cache images in "ram" (default) or "disk"')
-    parser.add_argument('--image-weights', action='store_true', help='use weighted image selection for training')
+    parser.add_argument('--cache', type=str, nargs='?', const='ram', help='--cache images in "ram" (default) or "disk"')  # whether to load the image to ram in order to speed up the training process
+    parser.add_argument('--image-weights', action='store_true', help='use weighted image selection for training')  # It aims to solve the problem of the data imbalance
     # cuda:0 意思是0号gpu
     parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%%')
     parser.add_argument('--single-cls', action='store_true', help='train multi-class data as single-class')
     parser.add_argument('--adam', default=if_adam, help='use torch.optim.Adam() optimizer')
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
-    parser.add_argument('--workers', type=int, default=16, help='maximum number of dataloader workers')
+    parser.add_argument('--workers', type=int, default=num_workers, help='maximum number of dataloader workers')
     parser.add_argument('--project', default=ROOT / 'runs/train', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
-    parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
+    parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')  # if the inference results saved in the same folder
     parser.add_argument('--quad', action='store_true', help='quad dataloader')
     parser.add_argument('--linear-lr', action='store_true', help='linear LR')
     parser.add_argument('--label-smoothing', type=float, default=0.0, help='Label smoothing epsilon')
     parser.add_argument('--patience', type=int, default=100, help='EarlyStopping patience (epochs without improvement)')
     parser.add_argument('--freeze', type=int, default=0, help='Number of layers to freeze. backbone=10, all=24')
     parser.add_argument('--save-period', type=int, default=-1, help='Save checkpoint every x epochs (disabled if < 1)')
-    parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
+    parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')  # It's used for the distributed training. It won't bother if you only have gpu.
 
     # Weights & Biases arguments
     parser.add_argument('--entity', default=None, help='W&B: Entity')

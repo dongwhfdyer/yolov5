@@ -7,6 +7,7 @@ Callback utils
 class Callbacks:
     """"
     Handles all registered callbacks for YOLOv5 Hooks
+    And actually the the call back is mainly used for logger. kuhn edited
     """
 
     # Define the available callbacks
@@ -51,6 +52,7 @@ class Callbacks:
     def get_registered_actions(self, hook=None):
         """"
         Returns all the registered actions by callback hook
+        if the hook is not specified, returns all the registered actions, otherwise returns the actions for the specified hook.
 
         Args:
             hook The name of the hook to check, defaults to all

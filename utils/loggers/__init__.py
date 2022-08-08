@@ -70,7 +70,7 @@ class Loggers():
         else:
             self.wandb = None
 
-    def on_pretrain_routine_end(self):
+    def on_pretrain_routine_end(self): # every callable function in this class is a hook in callbacks
         # Callback runs on pre-train routine end
         paths = self.save_dir.glob('*labels*.jpg')  # training labels
         if self.wandb:

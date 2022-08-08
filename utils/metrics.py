@@ -78,6 +78,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names
         plot_mc_curve(px, f1, Path(save_dir) / 'F1_curve.png', names, ylabel='F1')
         plot_mc_curve(px, p, Path(save_dir) / 'P_curve.png', names, ylabel='Precision')
         plot_mc_curve(px, r, Path(save_dir) / 'R_curve.png', names, ylabel='Recall')
+        plot_pr_column(px, py, ap, Path(save_dir) / 'PR_curve_column.png', names)
 
     i = f1.mean(0).argmax()  # max F1 index
     return p[:, i], r[:, i], ap, f1[:, i], unique_classes.astype('int32')
@@ -293,25 +294,55 @@ def wh_iou(wh1, wh2):
 
 # Plots ----------------------------------------------------------------------------------------------------------------
 
+
+##########nhuk#################################### kuhn edited version: It will plot the PR curve seperately for each class
 def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
-    # Precision-recall curve
-    fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
     py = np.stack(py, axis=1)
+    fig, axs = plt.subplots(2, 3, tight_layout=True)
+    for i, y in enumerate(py.T):
+        print("########################################")
+        save_dir_i = str(save_dir).replace('PR_curve.png', 'PR_curve_%s.png' % names[i])
+        print(f'save_dir_i: {save_dir_i}')
+        ax_ind_x, ax_ind_y = i % 2, i // 2
+        ax = axs[ax_ind_x, ax_ind_y]
 
-    if 0 < len(names) < 21:  # display per-class legend if < 21 classes
-        for i, y in enumerate(py.T):
-            ax.plot(px, y, linewidth=1, label=f'{names[i]} {ap[i, 0]:.3f}')  # plot(recall, precision)
-    else:
-        ax.plot(px, py, linewidth=1, color='grey')  # plot(recall, precision)
+        ax.plot(px, y, linewidth=2)
+        # ax.plot(px, y, linewidth=2, label='all classes %.3f mAP@0.5' % ap[i, :].mean())
+        ax.set_xlabel('Recall')
+        ax.set_ylabel('Precision')
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.title.set_text('%.3f mAP@0.5' % ap[i, 0])
 
-    ax.plot(px, py.mean(1), linewidth=3, color='blue', label='all classes %.3f mAP@0.5' % ap[:, 0].mean())
-    ax.set_xlabel('Recall')
-    ax.set_ylabel('Precision')
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    fig.savefig(Path(save_dir), dpi=250)
-    plt.close()
+        fig.savefig(Path(save_dir_i), dpi=250)
+        print(f'Saved to {save_dir_i}')
+        plt.close()
+
+##########nhuk####################################
+
+# ##########nhuk#################################### kuhn: it's original version. it will plot the PR curve for all classes
+# def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
+#     # Precision-recall curve
+#     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
+#     py = np.stack(py, axis=1)
+#
+#     if 0 < len(names) < 21:  # display per-class legend if < 21 classes
+#         for i, y in enumerate(py.T):
+#             ax.plot(px, y, linewidth=1, label=f'{names[i]} {ap[i, 0]:.3f}')  # plot(recall, precision)
+#     else:
+#         ax.plot(px, py, linewidth=1, color='grey')  # plot(recall, precision)
+#
+#     ax.plot(px, py.mean(1), linewidth=3, color='blue', label='all classes %.3f mAP@0.5' % ap[:, 0].mean())
+#     ax.set_xlabel('Recall')
+#     ax.set_ylabel('Precision')
+#     ax.set_xlim(0, 1)
+#     ax.set_ylim(0, 1)
+#     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+#     fig.savefig(Path(save_dir), dpi=250)
+#     plt.close()
+#
+#
+# ##########nhuk####################################
 
 
 def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence', ylabel='Metric'):
@@ -333,3 +364,25 @@ def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence'
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
     fig.savefig(Path(save_dir), dpi=250)
     plt.close()
+
+
+def plot_pr_column(px, py, ap, save_dir='map_histogram.png', names=()):
+    map = ap[:, 0]
+    # plot map with bar graph
+    fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
+    ax.bar(range(len(map)), map, width=0.5, align='center', color='gray', )
+
+    # 注释各柱状图的数值，在这里即分数
+    # preserve 2 decimal places
+    map_show = [int(i * 1000) / 1000.0 for i in map]
+    for i in range(len(map_show)):
+        plt.text(x=i-0.1, y=map_show[i]+0.02, s=map_show[i])
+    # for i in range(len(map)):
+    #     plt.text(x=i, y=map[i], s=map[i])
+
+    ax.set_xticks(range(len(map)))
+    ax.set_xticklabels(names.values())
+    ax.set_xlabel('Classes')
+    ax.set_ylabel('MaP')
+    ax.set_ylim(0, 1)
+    fig.savefig(Path(save_dir), dpi=250)

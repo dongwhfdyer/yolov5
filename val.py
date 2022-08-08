@@ -299,10 +299,21 @@ def run(data,
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    weights_path = ROOT / 'runs/train/exp6/weights/best.pt'
+
+    ##########nhuk#################################### local param setting
+    weights_path = ROOT / 'temp/80_best.pt'
     imgsz = 640
     cuda_device = '0'
     coco_yaml_path = ROOT / 'data/coco128.yaml'
+    ##########nhuk####################################
+
+    # ##########nhuk#################################### server param setting
+    # weights_path = ROOT / 'runs/train/exp6/weights/best.pt'
+    # imgsz = 640
+    # cuda_device = '0'
+    # coco_yaml_path = ROOT / 'data/coco128.yaml'
+    # ##########nhuk####################################
+
     parser.add_argument('--data', type=str, default=coco_yaml_path, help='dataset.yaml path')
     parser.add_argument('--weights', nargs='+', type=str, default=weights_path, help='model.pt path(s)')
     # parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model.pt path(s)')

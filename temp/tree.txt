@@ -1,0 +1,22 @@
+train
+    images
+        |-- crazing_1.jpg
+        |-- crazing_10.jpg
+        |-- crazing_100.jpg
+        ---
+    labels
+        |-- crazing_1.txt
+        |-- crazing_10.txt
+        |-- crazing_100.txt
+        ---
+val
+    images
+        |-- crazing_1.jpg
+        |-- crazing_10.jpg
+        |-- crazing_100.jpg
+        ---
+    labels
+        |-- crazing_1.txt
+        |-- crazing_10.txt
+        |-- crazing_100.txt
+        ---
