@@ -448,10 +448,12 @@ def parse_opt(known=False):
     if_resume = False  # when model is freeze, we can resume training.  epochs = 32
     coco_yaml_path = ROOT / 'data/X_shape_detection_1_classes.yaml'
     epochs = 300
-    imgsize = 960
+    imgsize = 224
     if_adam = True
     batch_size = 16
-    num_workers = 10  # cpu data loader multi-threading
+    num_workers = 0  # cpu data loader multi-threading
+    hyp_file = ROOT / 'data/hyps/hyp.scratch.yaml'
+    # wandb tensorboard
     ##########nhuk####################################
     parser.add_argument('--weights', type=str, default=pt_path, help='initial weights path')
     parser.add_argument('--resume', nargs='?', const=True, default=if_resume, help='resume most recent training')
@@ -460,7 +462,7 @@ def parse_opt(known=False):
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=imgsize, help='train, val image size (pixels)')
 
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
-    parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
+    parser.add_argument('--hyp', type=str, default=hyp_file, help='hyperparameters path')
     parser.add_argument('--batch-size', type=int, default=batch_size, help='total batch size for all GPUs, -1 for autobatch')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')

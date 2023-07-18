@@ -113,9 +113,8 @@ class Model(nn.Module):
             m.anchors /= m.stride.view(-1, 1, 1)
             check_anchor_order(m)
             self.stride = m.stride
-            self._initialize_biases()  # only run once
+            self._initialize_biases()
 
-        # Init weights, biases
         initialize_weights(self)
         self.info()
         LOGGER.info('')
@@ -254,7 +253,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
 
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):  # from, number, module, args
-        m = eval(m) if isinstance(m, str) else m  # eval strings
+        m = eval(m) if isinstance(m, str) else m
         for j, a in enumerate(args):
             try:
                 args[j] = eval(a) if isinstance(a, str) else a  # eval strings

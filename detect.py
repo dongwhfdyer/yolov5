@@ -7,6 +7,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
@@ -15,6 +16,8 @@ import cv2
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
+
+from line_detection import tackle_one_img_after_yolo
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -29,6 +32,11 @@ from utils.general import apply_classifier, check_img_size, check_imshow, check_
     strip_optimizer, xyxy2xywh
 from utils.plots import Annotator, colors
 from utils.torch_utils import load_classifier, select_device, time_sync
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+FORMAT = '%(asctime)s %(processName)-9s %(threadName)-9s  %(message)s'
+logging.basicConfig(format=FORMAT)
 
 
 @torch.no_grad()
@@ -59,6 +67,7 @@ def run(
         hide_conf=False,  # hide confidences
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
+        detector_2nd=False,  # use 2nd stage detector
 ):
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -75,6 +84,7 @@ def run(
     half &= device.type != 'cpu'  # half precision only supported on CUDA
 
     # Load model
+    # kuhn edited There are different models with different saving formats, like pt, onnx, tflite, pb.
     w = str(weights[0] if isinstance(weights, list) else weights)
     classify, suffix, suffixes = False, Path(w).suffix.lower(), ['.pt', '.onnx', '.tflite', '.pb', '']
     check_suffix(w, suffixes)  # check weights have acceptable suffix
@@ -82,12 +92,12 @@ def run(
     stride, names = 64, [f'class{i}' for i in range(1000)]  # assign defaults
     if pt:
         model = torch.jit.load(w) if 'torchscript' in w else attempt_load(weights, map_location=device)
-        stride = int(model.stride.max())  # model stride
+        stride = int(model.stride.max())
         names = model.module.names if hasattr(model, 'module') else model.names  # get class names
         if half:
             model.half()  # to FP16
-        if classify:  # second-stage classifier
-            modelc = load_classifier(name='resnet50', n=2)  # initialize
+        if classify:  # kuhn: what is this?
+            modelc = load_classifier(name='resnet50', n=2)
             modelc.load_state_dict(torch.load('resnet50.pt', map_location=device)['model']).to(device).eval()
     elif onnx:
         if dnn:
@@ -134,7 +144,7 @@ def run(
     if pt and device.type != 'cpu':
         model(torch.zeros(1, 3, *imgsz).to(device).type_as(next(model.parameters())))  # run once
     dt, seen = [0.0, 0.0, 0.0], 0
-    for path, img, im0s, vid_cap in dataset:
+    for path, img, im0s, vid_cap in dataset:  # kuhn: img: preprocessed image, im0s: original image
         t1 = time_sync()
         if onnx:
             img = img.astype('float32')
@@ -150,6 +160,7 @@ def run(
         # Inference
         if pt:
             visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
+
             pred = model(img, augment=augment, visualize=visualize)[0]
         elif onnx:
             if dnn:
@@ -205,7 +216,7 @@ def run(
             imc = im0.copy() if save_crop else im0  # for save_crop
             annotator = Annotator(im0, line_width=line_thickness, example=str(names))
             if len(det):
-                # Rescale boxes from img_size to im0 size
+                # kuhn: Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
                 # Print results
@@ -214,7 +225,26 @@ def run(
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
+                save_index = 0  # kuhn: used for detector_2nd
+                # [x1, y1, x2, y2] to[x, y, w, h] where xy1 = top - left, xy2 = bottom - right
                 for *xyxy, conf, cls in reversed(det):
+                    if detector_2nd:
+                        ##########nhuk#################################### customized by kuhn
+
+                        try:
+                            x_shape_center_pts = tackle_one_img_after_yolo(im0, xyxy, save_dir / f'{p.stem}_centered_{save_index}.jpg')
+                        except Exception as e:
+                            logger.debug(e)
+                        else:
+                            logger.info(f"x_shape_center_pts:{x_shape_center_pts}")
+                            cv2.cv2.circle(im0, (int(x_shape_center_pts[0]), int(x_shape_center_pts[1])), 15, (0, 255, 255), -1)
+                            cv2.cv2.putText(im0, str((int(x_shape_center_pts[0]), int(x_shape_center_pts[1]))), (int(x_shape_center_pts[0] - 60), int(x_shape_center_pts[1]) + 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 2)
+                            # cv2.cv2.putText(im0, str((int(x_shape_center_pts[0]), int(x_shape_center_pts[1]))), (int(x_shape_center_pts[0] -30), int(x_shape_center_pts[1]) + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                            # im0_small = cv2.resize(im0, (960, 960))
+                            # cv2.cv2.imshow("img", im0_small)
+                            # cv2.cv2.waitKey(0)
+                            save_index += 1
+                        ##########nhuk####################################
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
@@ -269,8 +299,9 @@ def run(
 def parse_opt():
     ##########nhuk#################################### param setting
     # weights_path = ROOT / 'temp/80_best.pt'
-    # weights_path = ROOT / 'yolov5s.pt'
-    weights_path = ROOT / 'runs/train/exp26/weights/best.pt'
+    weights_path = ROOT / 'yolov5s.pt'
+    # weights_path = ROOT / "useful_pts/X_shape_detection.pt"
+    # weights_path = ROOT / 'runs/train/exp26/weights/best.pt'
     source_path = "datasets/shibie/images"
     # source_path = "d:\\ANewspace\\code\\DATASETS\\CeyMo\\test\\images\\"
     # img_source_path = ROOT / "datasets/neu_det_train_val/val/images"
@@ -278,6 +309,7 @@ def parse_opt():
     device = '0'
     if_visualize_feature = False
     if_save_crop = True
+    if_detector_2nd = True  # if use 2nd detector after YOLO detection.
     ##########nhuk####################################
     parser = argparse.ArgumentParser()
     # parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path(s)')
@@ -307,6 +339,7 @@ def parse_opt():
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
+    parser.add_argument('--detector_2nd', default=if_detector_2nd, help='use second classifier')  # kuhn edited
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(FILE.stem, opt)

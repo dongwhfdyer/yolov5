@@ -1,165 +1,104 @@
-"""
-@file hough_lines.py
-@brief This program demonstrates line finding with the Hough transform
-"""
-import os
-import shutil
-import sys
-import math
-import time
-
-import cv2 as cv2
 import numpy as np
+import torch
+import yaml
+from scipy.cluster.vq import kmeans
+from tqdm import tqdm
 
 
-def get_intersection_pts(two_lines):
-    (pt1, pt2) = two_lines[0]
-    (pt3, pt4) = two_lines[1]
-    A = np.array([
-        [pt1[1] - pt2[1], pt2[0] - pt1[0]],
-        [pt3[1] - pt4[1], pt4[0] - pt3[0]]
-    ])
-    b = np.array([
-        [pt1[1] * pt2[0] - pt1[0] * pt2[1]],
-        [pt3[1] * pt4[0] - pt3[0] * pt4[1]]
-    ])
-    x, y = np.linalg.solve(A, b)
-    return (x, y)
+def kmean_anchors(path='./data/coco128.yaml', n=9, img_size=640, thr=4.0, gen=1000, verbose=True):
+    """ Creates kmeans-evolved anchors from training dataset
 
+        Arguments:
+            path: path to dataset *.yaml, or a loaded dataset
+            n: number of anchors
+            img_size: image size used for training
+            thr: anchor-label wh ratio threshold hyperparameter hyp['anchor_t'] used for training, default=4.0
+            gen: generations to evolve anchors using genetic algorithm
 
-def line_detect_one_img(filename):
-    ## [load]
+        Return:
+            k: kmeans evolved anchors
 
-    # Loads an image
-    src = cv2.imread(cv2.samples.findFile(filename), cv2.IMREAD_GRAYSCALE)
+        Usage:
+            from utils.general import *; _ = kmean_anchors()
+    """
+    thr = 1. / thr
 
-    dst = cv2.Canny(src, 50, 200, None, 3)
+    def metric(k, wh):  # compute metrics
+        r = wh[:, None] / k[None]
+        x = torch.min(r, 1. / r).min(2)[0]  # ratio metric
+        # x = wh_iou(wh, torch.tensor(k))  # iou metric
+        return x, x.max(1)[0]  # x, best_x
 
-    cdst = cv2.cvtColor(dst, cv2.COLOR_GRAY2BGR)
+    def fitness(k):  # mutation fitness
+        _, best = metric(torch.tensor(k, dtype=torch.float32), wh)
+        return (best * (best > thr).float()).mean()  # fitness
 
-    lines = cv2.HoughLines(dst, 1, np.pi / 180, 80, None, 0, 0)
-    center_x = (480, 480)
-    center_radius_thres = 300
-    simi_angle_thres = 40
-    if lines is not None:
-        pts_lines = get_pts_lines(lines)
+    def print_results(k):
+        k = k[np.argsort(k.prod(1))]
+        x, best = metric(k, wh0)
+        bpr, aat = (best > thr).float().mean(), (x > thr).float().mean() * n  # best possible recall, anch > thr
+        print('thr=%.2f: %.4f best possible recall, %.2f anchors past thr' % (thr, bpr, aat))
+        print('n=%g, img_size=%s, metric_all=%.3f/%.3f-mean/best, past_thr=%.3f-mean: ' %
+              (n, img_size, x.mean(), best.mean(), x[x > thr].mean()), end='')
+        for i, x in enumerate(k):
+            print('%i,%i' % (round(x[0]), round(x[1])), end=',  ' if i < len(k) - 1 else '\n')  # use in *.cfg
+        return k
+
+    if isinstance(path, str):  # *.yaml file
+        with open(path) as f:
+            data_dict = yaml.load(f, Loader=yaml.FullLoader)  # model dict
+        from utils.datasets import LoadImagesAndLabels
+        dataset = LoadImagesAndLabels(data_dict['train'], augment=True, rect=True)
     else:
-        return None
-    ##########nhuk#################################### angle inspection
-    print("######################################## angle inspection")
-    angle_approve_dict = {}
-    for i, (pt1, pt2) in enumerate(pts_lines):
-        # calculate the distance between the line and the center of the image
+        dataset = path  # dataset
 
-        # calculate the angle of the line
-        angle = int(math.atan2(pt2[1] - pt1[1], pt2[0] - pt1[0]) * (180 / math.pi))
-        if angle_approve_dict == {}:
-            angle_approve_dict[str(angle)] = [(pt1, pt2)]
-        else:
-            # if the angle is too close to the previous angle, ignore it
-            for an in angle_approve_dict:
-                int_an = int(an)
-                if abs(angle - int_an) < simi_angle_thres or 180 - abs(angle - int_an) < simi_angle_thres:
-                    angle_approve_dict[an].append((pt1, pt2))
-                    break
-            else:
-                angle_approve_dict[str(angle)] = [(pt1, pt2)]
-        print("angle_approve_dict:", angle_approve_dict)
-    ##########nhuk####################################
+    # Get label wh
+    shapes = img_size * dataset.shapes / dataset.shapes.max(1, keepdims=True)
+    wh0 = np.concatenate([l[:, 3:5] * s for s, l in zip(shapes, dataset.labels)])  # wh
 
-    ##########nhuk#################################### get the line with the smallest distance to the center
-    angle_approved_dist_max = []
-    print("######################################## dist min after angle inspection")
-    for an in angle_approve_dict:
-        dist_line2center_list = [get_dist_line2center(center_x, pt1, pt2) for (pt1, pt2) in angle_approve_dict[an]]
-        print(dist_line2center_list)
-        print(np.argmin(dist_line2center_list))
-        angle_approved_dist_max.append(angle_approve_dict[an][np.argmin(dist_line2center_list)])
-    ##########nhuk####################################
+    # Filter
+    i = (wh0 < 3.0).any(1).sum()
+    if i:
+        print('WARNING: Extremely small objects found. '
+              '%g of %g labels are < 3 pixels in width or height.' % (i, len(wh0)))
+    wh = wh0[(wh0 >= 2.0).any(1)]  # filter > 2 pixels
 
-    ##########nhuk#################################### remove the line that is too far from the center
-    print("######################################## remove the line that is too far from the center")
-    angle_approved_dist_max_2 = angle_approved_dist_max.copy()
-    for (pt1, pt2) in angle_approved_dist_max_2:
-        print("##############################")
-        if len(angle_approved_dist_max) == 2:
-            break
-        dist_line2center = get_dist_line2center(center_x, pt1, pt2)
-        if dist_line2center > center_radius_thres:
-            del angle_approved_dist_max[angle_approved_dist_max.index((pt1, pt2))]
-        print("pt1:", pt1)
-        print("pt2:", pt2)
-        print("dist_line2center:", dist_line2center)
-        print(angle_approved_dist_max)
+    # Kmeans calculation
+    print('Running kmeans for %g anchors on %g points...' % (n, len(wh)))
+    s = wh.std(0)  # sigmas for whitening
+    k, dist = kmeans(wh / s, n, iter=30)  # points, mean distance
+    k *= s
+    wh = torch.tensor(wh, dtype=torch.float32)  # filtered
+    wh0 = torch.tensor(wh0, dtype=torch.float32)  # unflitered
+    k = print_results(k)
 
-    if len(angle_approved_dist_max) != 2:
-        print("line number is not 2, the actual line number is:", len(angle_approved_dist_max))
-        time.sleep(5)
-        return None
+    # Plot
+    # k, d = [None] * 20, [None] * 20
+    # for i in tqdm(range(1, 21)):
+    #     k[i-1], d[i-1] = kmeans(wh / s, i)  # points, mean distance
+    # fig, ax = plt.subplots(1, 2, figsize=(14, 7))
+    # ax = ax.ravel()
+    # ax[0].plot(np.arange(1, 21), np.array(d) ** 2, marker='.')
+    # fig, ax = plt.subplots(1, 2, figsize=(14, 7))  # plot wh
+    # ax[0].hist(wh[wh[:, 0]<100, 0],400)
+    # ax[1].hist(wh[wh[:, 1]<100, 1],400)
+    # fig.tight_layout()
+    # fig.savefig('wh.png', dpi=200)
 
-    # get the intersection point of the two lines
-    inter_pts = get_intersection_pts(angle_approved_dist_max)
-    print("inter_pts:", inter_pts)
+    # Evolve
+    npr = np.random
+    f, sh, mp, s = fitness(k), k.shape, 0.9, 0.1  # fitness, generations, mutation prob, sigma
+    pbar = tqdm(range(gen), desc='Evolving anchors with Genetic Algorithm')  # progress bar
+    for _ in pbar:
+        v = np.ones(sh)
+        while (v == 1).all():  # mutate until a change occurs (prevent duplicates)
+            v = ((npr.random(sh) < mp) * npr.random() * npr.randn(*sh) * s + 1).clip(0.3, 3.0)
+        kg = (k.copy() * v).clip(min=2.0)
+        fg = fitness(kg)
+        if fg > f:
+            f, k = fg, kg.copy()
+            pbar.desc = 'Evolving anchors with Genetic Algorithm: fitness = %.4f' % f
+            if verbose:
+                print_results(k)
 
-    ##########nhuk####################################
-    for (pt1, pt2) in angle_approved_dist_max:
-        dist_line2center_list = [get_dist_line2center(center_x, pt1, pt2) for (pt1, pt2) in angle_approved_dist_max]
-        cv2.line(cdst, pt1, pt2, (0, 0, 255), 3, cv2.LINE_AA)
-    cv2.circle(cdst, (int(inter_pts[0]), int(inter_pts[1])), 10, (0, 255, 255), -1)
-
-    # linesP = cv2.HoughLinesP(dst, 1, np.pi / 180, 50, None, 50, 10)
-    #
-    # if linesP is not None:
-    #     for i in range(0, len(linesP)):
-    #         l = linesP[i][0]
-    #         cv2.line(cdstP, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), 3, cv2.LINE_AA)
-
-    # cv2.imshow("Source", src)
-    cv2.circle(cdst, center_x, center_radius_thres, (0, 0, 255), )
-    cv2.imshow("Detected Lines (in red) - Standard Hough Line Transform", cdst)
-    cv2.waitKey(0)
-    # cv2.imshow("Detected Lines (in red) - Probabilistic Line Transform", cdstP)
-
-    return cdst
-
-
-def get_pts_lines(lines):
-    pts_lines = []
-    for i in range(0, len(lines)):
-        if_draw = True
-        rho = lines[i][0][0]
-        theta = lines[i][0][1]
-        a = math.cos(theta)
-        b = math.sin(theta)
-        x0 = a * rho
-        y0 = b * rho
-        pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
-        pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
-        pts_lines.append((pt1, pt2))
-
-    return pts_lines
-
-
-def get_dist_line2center(center_x, pt1, pt2):
-    dist_pt1_center = math.sqrt((pt1[0] - center_x[0]) ** 2 + (pt1[1] - center_x[1]) ** 2)
-    distance_pt2_center = math.sqrt((pt2[0] - center_x[0]) ** 2 + (pt2[1] - center_x[1]) ** 2)
-    distance_pt1_pt2 = math.sqrt((pt1[0] - pt2[0]) ** 2 + (pt1[1] - pt2[1]) ** 2)
-    # Heron's formula
-    s = (dist_pt1_center + distance_pt2_center + distance_pt1_pt2) / 2
-    area = math.sqrt(s * (s - dist_pt1_center) * (s - distance_pt2_center) * (s - distance_pt1_pt2))
-    dist_line_center = 2 * area / distance_pt1_pt2
-    return dist_line_center
-
-
-if __name__ == "__main__":
-
-    data_path = r"d:\ANewspace\code\yolov5_new\datasets\shibie\result"
-    out_dir = r"d:\ANewspace\code\yolov5_new\datasets\shibie\result\line_detected"
-    if os.path.exists(out_dir):
-        shutil.rmtree(out_dir)
-    os.makedirs(out_dir)
-    for img_name in os.listdir(data_path):
-        print("########################################")
-        line_detected_img = line_detect_one_img(os.path.join(data_path, img_name))
-        if line_detected_img is not None:
-            cv2.imwrite(os.path.join(out_dir, img_name), line_detected_img)
+    return print_results(k)

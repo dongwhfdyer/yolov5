@@ -175,7 +175,7 @@ class LoadImages:
         self.img_size = img_size
         self.stride = stride
         self.files = images + videos
-        self.nf = ni + nv  # number of files
+        self.nf = ni + nv
         self.video_flag = [False] * ni + [True] * nv
         self.mode = 'image'
         self.auto = auto
@@ -191,11 +191,11 @@ class LoadImages:
         return self
 
     def __next__(self):
-        if self.count == self.nf:
+        if self.count == self.nf:  # kuhn: why?
             raise StopIteration
         path = self.files[self.count]
 
-        if self.video_flag[self.count]:
+        if self.video_flag[self.count]:  # process videos
             # Read video
             self.mode = 'video'
             ret_val, img0 = self.cap.read()

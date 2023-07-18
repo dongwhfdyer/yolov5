@@ -1,4 +1,5 @@
 # read txt file, strip all the spaces, and split the string into a list
+from imutils import build_montages
 import os
 import json
 import xml.etree.ElementTree as ET
@@ -279,84 +280,6 @@ def decode_json(json_folder_path, json_name, txt_folder):
             txt_file.write(str(name2id[label_name]) + " " + " ".join([str(a) for a in bbox]) + '\n')
 
 
-def img_draw_bndbox(img_path, xml_path, out_path, img_draw_name):
-    '''
-
-    :param img_path: str, 原图像的地址
-    :param xml_path: str, xml文件的地址
-    :param out_path: 保存图像的地址
-    :param img_draw_name:保存图像的名称
-    :return: None
-    '''
-
-    image = cv2.imread(img_path)
-    # 使用minidom解析器打开 XML 文档
-    DOMTree = xml.dom.minidom.parse(xml_path)
-    collection = DOMTree.documentElement
-    # print(collection)
-
-    '''
-    获得左上角坐标(xmin, ymin)，右下角坐标(xmax, ymax)
-    x.firstchild.data:获取元素第一个子节点的数据；
-    x.childNodes[0]：:获取元素第一个子节点;
-    x.childNodes[0].nodeValue.:也是获取元素第一个子节点值的意思
-    '''
-    # 示例：提取图片名称、宽、高
-    filename = collection.getElementsByTagName('filename')[0].firstChild.data
-    width = collection.getElementsByTagName('width')[0].firstChild.data
-    height = collection.getElementsByTagName('height')[0].childNodes[0].nodeValue
-    # print(filename)
-    # print(width)
-    # print(height)
-
-    truncated_list = []
-    object_elements = collection.getElementsByTagName('object')
-    for object_element in object_elements:
-        # 获得类别名称
-        object_name = object_element.getElementsByTagName('name')[0].firstChild.data
-        # print('object name: ', object_name)
-        # 获得第一个 bndbox，一个object下只有一个bndbox，第一个就是，他的下标是0
-        bndbox_element = object_element.getElementsByTagName('bndbox')[0]
-        xmin = bndbox_element.getElementsByTagName('xmin')[0].firstChild.data
-        ymin = bndbox_element.getElementsByTagName('ymin')[0].firstChild.data
-        xmax = bndbox_element.getElementsByTagName('xmax')[0].firstChild.data
-        ymax = bndbox_element.getElementsByTagName('ymax')[0].firstChild.data
-        # get truncated value
-
-        truncated = object_element.getElementsByTagName('truncated')[0].firstChild.data
-        if truncated == '1':
-            truncated_list.append(img_path)
-
-        # 用红框把图像中的人脸框出,红色 (0, 0, 255)。
-        '''
-        import cv2
-        cv2.rectangle(img, (x1, y1), (x2, y2), (255,0,0), 2)
-
-(xmin,ymin) -----------
-           |          |
-           |          |
-           |          |
-           ------------(xmax,ymax)
-        '''
-        try:
-            xmin, ymin, xmax, ymax = int(xmin), int(ymin), int(xmax), int(ymax)
-            color = (0, 0, 255) if truncated == '1' else (0, 255, 0)
-            image = cv2.rectangle(image, (xmin, ymin), (xmax, ymax), color, 2)
-            font = cv2.FONT_HERSHEY_SIMPLEX  # 定义字体
-            # cv2.putText()参数依次是：图像，文字内容，坐标(左上角坐标) ，字体，大小，颜色，字体厚度
-            # 用黄色字体在图像中写出类别名称，黄色 (0, 255, 255)
-            image = cv2.putText(image, object_name, (xmin, ymin), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-        except:
-            print("data invalid!")
-
-    # cv2.imshow("image", image)
-    # cv2.waitKey(0)
-    cv2.imwrite(os.path.join(out_path, img_draw_name), image)
-    with open("truncated_list.txt", "w") as f:
-        for i in truncated_list:
-            f.write(i + "\n")
-    return
-
 
 def delete_folders(*folder_path):
     for folder in folder_path:
@@ -390,6 +313,11 @@ def copy_folder_everything(src, dst, if_leave_root=False):
 
 
 class tackle_position_X_shape_datasets:
+    """
+    YOLO datasets preprocess class.
+    It can tackle with dataset with xml format. It can convert xml data to txt data.
+    """
+
     def __init__(self, dataset_path):
         self.dataset_folder = dataset_path
         self.xml_folder = os.path.join(self.dataset_folder, "xml_labels")
@@ -399,26 +327,36 @@ class tackle_position_X_shape_datasets:
         self.cropped_folder = os.path.join(self.dataset_folder, "cropped")
         self.classes = ['lab']
 
-    def rename_images_sort(self):
+        ##########nhuk#################################### divide the dataset into train and test
+        self.train_folder = os.path.join(self.dataset_folder, "train")
+        self.train_img_folder = os.path.join(self.train_folder, "images")
+        self.train_label_folder = os.path.join(self.train_folder, "labels")
+        self.val_folder = os.path.join(self.dataset_folder, "val")
+        self.val_img_folder = os.path.join(self.val_folder, "images")
+        self.val_label_folder = os.path.join(self.val_folder, "labels")
+        ##########nhuk####################################
+
+    def rename_data_and_sort(self):
         """
-        rename images and sort them by name
+        rename images and labels and sort them by name
         :return:
         """
         img_list = os.listdir(self.img_folder)
         img_list.sort()
         for i in range(len(img_list)):
             os.rename(os.path.join(self.img_folder, img_list[i]), os.path.join(self.img_folder, str(i).zfill(4) + ".jpg"))
+            os.rename(os.path.join(self.xml_folder, img_list[i].split(".")[0] + ".xml"), os.path.join(self.xml_folder, str(i).zfill(4) + ".xml"))
 
-    def draw_position_X_shape_datasets(self):
+    def draw_bndbox_on_datasets(self):
         delete_folders(self.draw_folder)
         create_folders(self.draw_folder)
         for img_name in os.listdir(self.img_folder):
             img_path = os.path.join(self.img_folder, img_name)
             xml_path = os.path.join(self.xml_folder, img_name.replace(".jpg", ".xml"))
             img_draw_name = img_name.replace(".jpg", "_draw.jpg")
-            self.img_draw_bndbox(img_path, xml_path, self.draw_folder, img_draw_name)
+            self.one_img_draw_bndbox(img_path, xml_path, self.draw_folder, img_draw_name)
 
-    def img_draw_bndbox(self, img_path, xml_path, out_path, img_draw_name):
+    def one_img_draw_bndbox(self, img_path, xml_path, out_path, img_draw_name):
         '''
 
         :param img_path: str, 原图像的地址
@@ -546,6 +484,25 @@ class tackle_position_X_shape_datasets:
             image_name = image_path.split('\\')[-1]
             self.convert_annotation(image_name, self.labels_folder, self.xml_folder)
 
+    def train_val_split(self, trainval_percent=0.9):
+        """
+        :param trainval_percent: train: val = 9 : 1
+        :return: None
+        """
+        delete_folders(self.train_folder, self.val_folder)
+        create_folders(self.train_img_folder, self.train_label_folder, self.val_img_folder, self.val_label_folder)
+        total_num = len(os.listdir(self.img_folder))
+        list_index = range(total_num)
+        tv = int(total_num * trainval_percent)
+        train_index = random.sample(list_index, tv)
+        val_index = [i for i in list_index if i not in train_index]
+        for index in train_index:
+            shutil.copy(os.path.join(self.img_folder, os.listdir(self.img_folder)[index]), self.train_img_folder)
+            shutil.copy(os.path.join(self.labels_folder, os.listdir(self.labels_folder)[index]), self.train_label_folder)
+        for index in val_index:
+            shutil.copy(os.path.join(self.img_folder, os.listdir(self.img_folder)[index]), self.val_img_folder)
+            shutil.copy(os.path.join(self.labels_folder, os.listdir(self.labels_folder)[index]), self.val_label_folder)
+
     def crop_img_on_dataset(self):
         delete_folders(self.cropped_folder)
         create_folders(self.cropped_folder)
@@ -619,13 +576,6 @@ class cropped_X_shaped_dataset:
 
             result, img_proc = self.transform_guy(transform_seq, img)
 
-            # ##########nhuk#################################### old process way
-            # img_proc = self.process_img(img)
-            # img_black = self.RGB2Black(img_proc)
-            # img_proc_dilate = self.dilate_img(img_black)
-            # img_proc_erode = self.erode_img(img_proc_dilate)
-            # img_proc = self.concat_img(img, img_proc, img_black, img_proc_dilate, img_proc_erode)
-            # ##########nhuk####################################
             ##########nhuk#################################### save img
             img_save_name = img_name.replace(".jpg", "_proc.jpg")
             # text_content = " ".join([proc.__name__ for proc in transform_seq])
@@ -640,49 +590,11 @@ class cropped_X_shaped_dataset:
             ##########nhuk####################################
 
     def process_img(self, img: np.ndarray) -> np.ndarray:
-        # ##########nhuk#################################### HSV
-        # img_ = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        # ##########nhuk####################################
-        # 红：h > 300
-        # 或者h < 25
-        #
-        # 黄：35 < h < 85
-        #
-        # 绿：95 < h < 200
-        # ##########nhuk#################################### mask_1
-        # bgr = [240, 158, 240]
-        # thresh = 40
-        #
-        # minBGR = np.array([bgr[0] - thresh, bgr[1] - thresh, bgr[2] - thresh])
-        # maxBGR = np.array([bgr[0] + thresh, bgr[1] + thresh, bgr[2] + thresh])
-        #
-        # maskBGR = cv2.inRange(img, minBGR, maxBGR)
-        # img_ = cv2.bitwise_and(img, img, mask=maskBGR)
-        # ##########nhuk####################################
 
-        # ##########nhuk#################################### mask_2
-        # hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        # # red
-        # lower_red = np.array([0, 50, 50])
-        # upper_red = np.array([150, 255, 255])
-        # # upper_red = np.array([10, 255, 255])
-        # img_ = cv2.inRange(hsv, lower_red, upper_red)
-        # # yellow
-        # lower_yellow = np.array([20, 50, 50])
-        # upper_yellow = np.array([10, 255, 255])
-        # mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
-        # # green
-        # lower_green = np.array([60, 50, 50])
-        # upper_green = np.array([70, 255, 255])
-        # mask_green = cv2.inRange(hsv, lower_green, upper_green)
-        # ##########nhuk####################################
-
-        ##########nhuk#################################### mask_3
         result = img.copy()
 
         image = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-        ##########nhuk#################################### mask_4
         high_V = 245
         low_V = 0
         high_S = 255
@@ -693,7 +605,6 @@ class cropped_X_shaped_dataset:
         # upper boundary RED color range values; Hue (160 - 180)
         lower2 = np.array([130, low_S, low_V])
         upper2 = np.array([179, high_S, high_V])
-        ##########nhuk####################################
 
         lower_mask = cv2.inRange(image, lower1, upper1)
         upper_mask = cv2.inRange(image, lower2, upper2)
@@ -701,34 +612,6 @@ class cropped_X_shaped_dataset:
         full_mask = lower_mask + upper_mask
 
         img_ = cv2.bitwise_and(result, result, mask=full_mask)
-
-        ##########nhuk####################################
-
-        # def line_detection(image):
-        #     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        #     edges = cv2.Canny(gray, 50, 150, apertureSize=3)  # apertureSize是sobel算子大小，只能为1,3,5，7
-        #     lines = cv2.HoughLines(edges, 1, np.pi / 180, 200)  # 函数将通过步长为1的半径和步长为π/180的角来搜索所有可能的直线
-        #     for line in lines:
-        #         rho, theta = line[0]　　  # 获取极值ρ长度和θ角度
-        #         a = np.cos(theta)　　  # 获取角度cos值
-        #         b = np.sin(theta)　　  # 获取角度sin值
-        #         x0 = a * rho　　  # 获取x轴值
-        #         y0 = b * rho　　  # 获取y轴值　　x0和y0是直线的中点
-        #         x1 = int(x0 + 1000 * (-b))　　  # 获取这条直线最大值点x1
-        #         y1 = int(y0 + 1000 * (a))　　  # 获取这条直线最大值点y1
-        #         x2 = int(x0 - 1000 * (-b))  # 获取这条直线最小值点x2　　
-        #         y2 = int(y0 - 1000 * (a))　  # 获取这条直线最小值点y2　　其中*1000是内部规则
-        #         cv2.line(image, (x1, y1), (x2, y2), (0, 0, 255), 2)　　  # 开始划线
-        #         cv2.imshow("image line", image)
-        #
-        #     src = cv2.imread("./l.png")  # 读取图片
-        #     cv2.namedWindow("input image", cv2.WINDOW_AUTOSIZE)  # 创建GUI窗口,形式为自适应
-        #     cv2.imshow("input image", src)  # 通过名字将图像和窗口联系
-        #
-        #     line_detect_possible_demo(src)
-        #
-        #     cv2.waitKey(0)  # 等待用户操作，里面等待参数是毫秒，我们填写0，代表是永远，等待用户操作
-        #     cv2.destroyAllWindows()  # 销毁所有窗口
 
         return img_
 
@@ -808,97 +691,31 @@ class cropped_X_shaped_dataset:
             cv2.waitKey(0)
 
 
-def line_detection():
-    # -*- coding: UTF-8 -*-
-    def cross_point(line1, line2):  # 计算交点函数
-        # 是否存在交点
-        point_is_exist = False
-        x = 0
-        y = 0
-        x1 = line1[0]  # 取四点坐标
-        y1 = line1[1]
-        x2 = line1[2]
-        y2 = line1[3]
-
-        x3 = line2[0]
-        y3 = line2[1]
-        x4 = line2[2]
-        y4 = line2[3]
-
-        if (x2 - x1) == 0:
-            k1 = None
-        else:
-            k1 = (y2 - y1) * 1.0 / (x2 - x1)  # 计算k1,由于点均为整数，需要进行浮点数转化
-            b1 = y1 * 1.0 - x1 * k1 * 1.0  # 整型转浮点型是关键
-
-        if (x4 - x3) == 0:  # L2直线斜率不存在操作
-            k2 = None
-            b2 = 0
-        else:
-            k2 = (y4 - y3) * 1.0 / (x4 - x3)  # 斜率存在操作
-            b2 = y3 * 1.0 - x3 * k2 * 1.0
-
-        if k1 is None:
-            if not k2 is None:
-                x = x1
-                y = k2 * x1 + b2
-                point_is_exist = True
-        elif k2 is None:
-            x = x3
-            y = k1 * x3 + b1
-        elif not k2 == k1:
-            x = (b2 - b1) * 1.0 / (k1 - k2)
-            y = k1 * x * 1.0 + b1 * 1.0
-            point_is_exist = True
-        return point_is_exist, [x, y]
-
-    # 图片路径
-    data_path = r"d:\ANewspace\code\yolov5_new\datasets\shibie\result"
-    for img_name in os.listdir(data_path):
-        try:
-            imgPath = os.path.join(data_path, img_name)
-            img = cv2.imread(imgPath)
-            # cv2.imshow("image", img)
-            # cv2.waitKey(0)
-            # 转灰度图
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            # 高斯模糊
-            gray = cv2.GaussianBlur(gray, (3, 3), 0)
-            # 边缘检测
-            edges = cv2.Canny(gray, 100, 200)
-            # 霍夫变换
-            lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 25, minLineLength=500, maxLineGap=20)
-            lines1 = lines[:, 0, :]  # 提取为二维
-            for x1, y1, x2, y2 in lines1[:]:
-                cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
-
-            for x1, y1, x2, y2 in lines1[:]:
-                for x3, y3, x4, y4 in lines1[:]:
-                    point_is_exist, [x, y] = cross_point([x1, y1, x2, y2], [x3, y3, x4, y4])
-                    if point_is_exist:
-                        cv2.circle(img, (int(x), int(y)), 5, (0, 0, 255), 3)
-            cv2.imshow('Result', img)
-            cv2.waitKey(0)
-        except Exception as e:
-            print(e)
+def whole_process():
+    tttacle = tackle_position_X_shape_datasets(new_dataset_path)
+    tttacle.rename_data_and_sort()
+    tttacle.draw_bndbox_on_datasets()
+    # after inspect the data with naked eye, we can see that the bndbox is not correct, so we need to fix it.
+    tttacle.xml2txt()
 
 
 if __name__ == '__main__':
-    tac_cropped = cropped_X_shaped_dataset()
-    tac_cropped.extract_whole_dataset()
+    # tac_cropped = cropped_X_shaped_dataset()
+    # tac_cropped.extract_whole_dataset()
     # tac_cropped.line_test()
     # tac_cropped.get_hsv_value(r"d:\ANewspace\code\yolov5_new\datasets\shibie\wrong_label")
     # line_detection()
     # get_hsv_value()
-    # ##########nhuk#################################### X_shape_dataset
-    # # dataset_path = "datasets\shibie"
-    # # delete_folders("datasets\shibie")
-    # # dataset_path = "d:\download\shibie\shibie"
-    # new_dataset_path = "datasets\shibie"
-    # # copy_folder_everything(dataset_path, new_dataset_path)
-    # tttacle = tackle_position_X_shape_datasets(new_dataset_path)
-    # # tttacle.xml2txt()
+    ##########nhuk#################################### X_shape_dataset
+    # dataset_path = "datasets\shibie"
+    # delete_folders("datasets\shibie")
+    # dataset_path = "d:\download\shibie\shibie"
+    new_dataset_path = "datasets\shibie"
+    # copy_folder_everything(dataset_path, new_dataset_path)
+    tttacle = tackle_position_X_shape_datasets(new_dataset_path)
+    # tttacle.train_val_split()
+    # tttacle.xml2txt()
     # tttacle.crop_img_on_dataset()
-    # # tttacle.draw_position_X_shape_datasets()
-    # # tttacle.rename_images_sort()
-    # ##########nhuk####################################
+    # tttacle.draw_bndbox_on_datasets()
+    # tttacle.rename_data_and_sort()
+    ##########nhuk####################################
